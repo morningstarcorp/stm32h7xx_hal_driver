@@ -1394,6 +1394,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, const uint8_t
   /* Transmit and Receive data in 8 Bit mode */
   else
   {
+#if 0 // Original code by ST:
     while ((initial_TxXferCount > 0UL) || (initial_RxXferCount > 0UL))
     {
       /* Check the TXP flag */
@@ -1428,6 +1429,126 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, const uint8_t
         return HAL_TIMEOUT;
       }
     }
+#else // Workarounds implemented by morningstar. Based on a previous HAL version
+    while ((initial_TxXferCount > 0UL) || (initial_RxXferCount > 0UL))
+    {
+      /* check TXP flag */
+	  /* Note by MTG April 18, 2018: hal_spi.c/.h, hal_spi_ex.c/.h have been
+      upgraded to V1.2.0 while the rest of HAL is still at 1.0.0. This is to
+      fix a few persistent SPI bugs. Bugfixes for 1.0.0 have been ported to this
+      version. They may be unnecessary now. */
+	  // old ST code: 
+	  //      if ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (initial_TxXferCount > 0UL))
+	  //      {
+		/* check TXE flag */
+	  #pragma diag_suppress=Pa082
+      if ((initial_TxXferCount >= initial_RxXferCount) && (initial_TxXferCount > 0U) && (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)))
+      #pragma diag_warning=Pa082
+      {
+		  /* Bug workarounds below by jdubovsky, 2017 aug 30.
+        While attempting to use this blocking routine while diagnosing DMA and interrupt
+        problems, I ran into two very big bugs:
+        1. The logic allowed for overruns: stuffing TX bytes despite not having cleared
+          RX bytes that were in-flight, since we're configured with just a 1-byte FIFO.
+        2. Never checking for overruns and thus reporting them as timeouts.
+        So I've choked down the transmit logic to only enqueue a TX byte if we wouldn't
+        get ahead of the RX byte counter.  This means slower-than-max-rate sending, but
+        this is a first step to make this work.
+        We can later rewrite this to use a configurable FIFO threshold (CFG1.FTHVL) and
+        then watch SR.RXWNE and SR.RXPLVL for the final sub-threshold-sized part.
+        We can't simply make a copy of this function in our code because it uses
+        static (local to this file) functions.  Bleh.
+        */
+        if ((initial_TxXferCount > 3UL) && (hspi->Init.FifoThreshold > SPI_FIFO_THRESHOLD_03DATA))
+        {
+          *((__IO uint32_t *)&hspi->Instance->TXDR) = *((uint32_t *)hspi->pTxBuffPtr);
+          hspi->pTxBuffPtr += sizeof(uint32_t);
+          hspi->TxXferCount -= (uint16_t)4UL;
+          initial_TxXferCount = hspi->TxXferCount;
+        }
+        else if ((initial_TxXferCount > 1UL) && (hspi->Init.FifoThreshold > SPI_FIFO_THRESHOLD_01DATA))
+        {
+#if defined (__GNUC__)
+          *ptxdr_16bits = *((uint16_t *)hspi->pTxBuffPtr);
+#else
+          *((__IO uint16_t *)&hspi->Instance->TXDR) = *((uint16_t *)hspi->pTxBuffPtr);
+#endif /* __GNUC__ */
+          hspi->pTxBuffPtr += sizeof(uint16_t);
+          hspi->TxXferCount -= (uint16_t)2UL;
+          initial_TxXferCount = hspi->TxXferCount;
+        }
+        else
+        {
+          *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
+          hspi->pTxBuffPtr += sizeof(uint8_t);
+          hspi->TxXferCount--;
+          initial_TxXferCount = hspi->TxXferCount;
+        }
+      }
+	  // jdubovsky add: check overflow and treat as an error (error code copied from
+      // Timeout check below).
+      if (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_OVR)) {
+        //__BKPT(0);
+        // Error handling code replaced by MTG
+        /* Call standard close procedure with error check */
+        SPI_CloseTransfer(hspi);
+
+        /* Process Unlocked */
+        __HAL_UNLOCK(hspi);
+
+        SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_OVR);
+        hspi->State = HAL_SPI_STATE_READY;
+        return HAL_ERROR;
+      }
+      /* Wait until RXWNE/FRLVL flag is reset */
+     // old ST code: if (((hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL)) != 0UL) && (initial_RxXferCount > 0UL))
+	 while ((hspi->RxXferCount > 0U) && (hspi->Instance->SR & (SPI_FLAG_RXWNE|SPI_FLAG_FRLVL)))
+      {
+		   /* jdubovsky added: commented out all the multi-byte receives since
+        they inexplicably cause overruns.*/
+		  // old ST code:
+//        if ((hspi->Instance->SR & SPI_FLAG_RXWNE) != 0UL)
+//        {
+//          *((uint32_t *)hspi->pRxBuffPtr) = *((__IO uint32_t *)&hspi->Instance->RXDR);
+//          hspi->pRxBuffPtr += sizeof(uint32_t);
+//          hspi->RxXferCount -= (uint16_t)4UL;
+//          initial_RxXferCount = hspi->RxXferCount;
+//        }
+//        else if ((hspi->Instance->SR & SPI_FLAG_FRLVL) > SPI_RX_FIFO_1PACKET)
+//        {
+//#if defined (__GNUC__)
+//          *((uint16_t *)hspi->pRxBuffPtr) = *prxdr_16bits;
+//#else
+//          *((uint16_t *)hspi->pRxBuffPtr) = *((__IO uint16_t *)&hspi->Instance->RXDR);
+//#endif /* __GNUC__ */
+//          hspi->pRxBuffPtr += sizeof(uint16_t);
+//          hspi->RxXferCount -= (uint16_t)2UL;
+//          initial_RxXferCount = hspi->RxXferCount;
+//        }
+//        else
+        {
+          *((uint8_t *)hspi->pRxBuffPtr) = *((__IO uint8_t *)&hspi->Instance->RXDR);
+          hspi->pRxBuffPtr += sizeof(uint8_t);
+          hspi->RxXferCount--;
+          initial_RxXferCount = hspi->RxXferCount;
+        }
+      }
+
+      /* Timeout management */
+      if ((((HAL_GetTick() - tickstart) >=  Timeout) && (Timeout != HAL_MAX_DELAY)) || (Timeout == 0U))
+      {
+        /* Call standard close procedure with error check */
+        SPI_CloseTransfer(hspi);
+
+        /* Process Unlocked */
+        __HAL_UNLOCK(hspi);
+
+        SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_TIMEOUT);
+        hspi->State = HAL_SPI_STATE_READY;
+        return HAL_ERROR;
+      }
+    }
+#endif
   }
 
   /* Wait for Tx/Rx (and CRC) data to be sent/received */
