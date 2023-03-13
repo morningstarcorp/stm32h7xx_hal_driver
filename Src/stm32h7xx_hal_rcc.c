@@ -244,6 +244,19 @@ HAL_StatusTypeDef HAL_RCC_DeInit(void)
   {
     if ((HAL_GetTick() - tickstart) > CLOCKSWITCH_TIMEOUT_VALUE)
     {
+      /*
+        Hal edit 2021/1/14 Herman: We found this bug when the LSE failed to init
+        The H7 data sheet in Table 142. Low-speed external user clock characteristics
+        it say it will take a min of 2 sec and a max of ?? so, we need to pet the watchdog
+        in here since we need to pet it every 2-3 sec.
+        Note: its a bad idea to pet the watchdog in an unbounded loop, but the only
+        way this becomes a problem is if systick is no longer incrementing but
+        if that is the case then we have many other problems.
+      */
+#ifndef DISABLE_WATCHDOG
+      extern IWDG_HandleTypeDef HiwdgHandle;  // the global HAL handle
+      HAL_IWDG_Refresh(&HiwdgHandle);
+#endif // DISABLE_WATCHDOG
       return HAL_TIMEOUT;
     }
   }
@@ -730,7 +743,20 @@ __weak HAL_StatusTypeDef HAL_RCC_OscConfig(RCC_OscInitTypeDef  *RCC_OscInitStruc
       /* Wait till LSE is ready */
       while (__HAL_RCC_GET_FLAG(RCC_FLAG_LSERDY) == 0U)
       {
-        if ((HAL_GetTick() - tickstart) > RCC_LSE_TIMEOUT_VALUE)
+        /*
+           Hal edit 2021/1/14 Herman: We found this bug when the LSE failed to init
+           The H7 data sheet in Table 142. Low-speed external user clock characteristics
+           it say it will take a min of 2 sec and a max of ?? so, we need to pet the watchdog
+           in here since we need to pet it every 2-3 sec.
+           Note: its a bad idea to pet the watchdog in an unbounded loop, but the only
+           way this becomes a problem is if systick is no longer incrementing but
+           if that is the case then we have many other problems.
+        */
+#ifndef DISABLE_WATCHDOG
+        extern IWDG_HandleTypeDef HiwdgHandle;  // the global HAL handle
+        HAL_IWDG_Refresh(&HiwdgHandle);
+#endif // DISABLE_WATCHDOG
+        if((HAL_GetTick() - tickstart ) > RCC_LSE_TIMEOUT_VALUE)
         {
           return HAL_TIMEOUT;
         }
@@ -1097,6 +1123,7 @@ HAL_StatusTypeDef HAL_RCC_ClockConfig(RCC_ClkInitTypeDef  *RCC_ClkInitStruct, ui
     /* Get Start Tick*/
     tickstart = HAL_GetTick();
 
+#if 0 // Original code by ST
     while (__HAL_RCC_GET_SYSCLK_SOURCE() != (RCC_ClkInitStruct->SYSCLKSource << RCC_CFGR_SWS_Pos))
     {
       if ((HAL_GetTick() - tickstart) > CLOCKSWITCH_TIMEOUT_VALUE)
@@ -1104,7 +1131,28 @@ HAL_StatusTypeDef HAL_RCC_ClockConfig(RCC_ClkInitTypeDef  *RCC_ClkInitStruct, ui
         return HAL_TIMEOUT;
       }
     }
-
+#else // JC bringing in changes from our previous HAL
+    while (__HAL_RCC_GET_SYSCLK_SOURCE() !=  (RCC_ClkInitStruct->SYSCLKSource << RCC_CFGR_SWS_Pos))
+    {
+      if((HAL_GetTick() - tickstart ) > CLOCKSWITCH_TIMEOUT_VALUE)
+      {
+        /*
+          Hal edit 2021/1/14 Herman: We found this bug when the LSE failed to init
+          The H7 data sheet in Table 142. Low-speed external user clock characteristics
+          it say it will take a min of 2 sec and a max of ?? so, we need to pet the watchdog
+          in here since we need to pet it every 2-3 sec.
+          Note: its a bad idea to pet the watchdog in an unbounded loop, but the only
+          way this becomes a problem is if systick is no longer incrementing but
+          if that is the case then we have many other problems.
+        */
+#ifndef DISABLE_WATCHDOG
+            extern IWDG_HandleTypeDef HiwdgHandle;  // the global HAL handle
+            HAL_IWDG_Refresh(&HiwdgHandle);
+#endif // DISABLE_WATCHDOG
+            return HAL_TIMEOUT;
+          }
+        }
+#endif
   }
 
   /* Decreasing the BUS frequency divider */
