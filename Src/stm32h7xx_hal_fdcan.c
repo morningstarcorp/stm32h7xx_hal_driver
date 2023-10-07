@@ -5514,6 +5514,16 @@ void HAL_FDCAN_IRQHandler(FDCAN_HandleTypeDef *hfdcan)
 
     /* Update error code */
     hfdcan->ErrorCode |= Errors;
+
+#if 1 // Workarounds implemented by morningstar.
+#if USE_HAL_FDCAN_REGISTER_CALLBACKS == 1
+    /* Call registered callback*/
+    hfdcan->ErrorStatusCallback(hfdcan, Errors);
+#else
+    /* Error Callback */
+    HAL_FDCAN_ErrorStatusCallback(hfdcan, Errors);
+#endif /* USE_HAL_FDCAN_REGISTER_CALLBACKS */
+#endif
   }
 
   if (hfdcan->Instance == FDCAN1)
@@ -5622,6 +5632,7 @@ void HAL_FDCAN_IRQHandler(FDCAN_HandleTypeDef *hfdcan)
     }
   }
 
+#if 0 // Original code by ST
   if (hfdcan->ErrorCode != HAL_FDCAN_ERROR_NONE)
   {
 #if USE_HAL_FDCAN_REGISTER_CALLBACKS == 1
@@ -5632,6 +5643,7 @@ void HAL_FDCAN_IRQHandler(FDCAN_HandleTypeDef *hfdcan)
     HAL_FDCAN_ErrorCallback(hfdcan);
 #endif /* USE_HAL_FDCAN_REGISTER_CALLBACKS */
   }
+#endif
 }
 
 /**
