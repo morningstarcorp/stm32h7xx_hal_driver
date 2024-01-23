@@ -3151,9 +3151,12 @@ static uint32_t SD_PowerON(SD_HandleTypeDef *hsd)
     return errorstate;
   }
 
+  /* HAL edit 1/23/2024: also check for SDMMC_ERROR_CMD_RSP_TIMEOUT.
+     Older SD cards will fail to init if we don't allow for that error.
+   */
   /* CMD8: SEND_IF_COND: Command available only on V2.0 cards */
   errorstate = SDMMC_CmdOperCond(hsd->Instance);
-  if (errorstate == SDMMC_ERROR_TIMEOUT) /* No response to CMD8 */
+  if (errorstate == SDMMC_ERROR_TIMEOUT || errorstate == SDMMC_ERROR_CMD_RSP_TIMEOUT) /* No response to CMD8 */
   {
     hsd->SdCard.CardVersion = CARD_V1_X;
     /* CMD0: GO_IDLE_STATE */
