@@ -1441,9 +1441,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, const uint8_t
 	  //      if ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (initial_TxXferCount > 0UL))
 	  //      {
 		/* check TXE flag */
-	  #pragma diag_suppress=Pa082
       if ((initial_TxXferCount >= initial_RxXferCount) && (initial_TxXferCount > 0U) && (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)))
-      #pragma diag_warning=Pa082
       {
 		  /* Bug workarounds below by jdubovsky, 2017 aug 30.
         While attempting to use this blocking routine while diagnosing DMA and interrupt
