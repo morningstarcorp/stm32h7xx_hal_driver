@@ -380,8 +380,15 @@ HAL_StatusTypeDef HAL_RCC_DeInit(void)
   /* Clear all interrupts flags */
   WRITE_REG(RCC->CICR, 0xFFFFFFFFU);
 
+  /* 
+  	Morningstar Corporation Work Around:
+
+  	We don't reset the RSR flags because it contains valuable
+  	debugging information at boot up.
+  */
+
   /* Reset all RSR flags */
-  SET_BIT(RCC->RSR, RCC_RSR_RMVF);
+  // SET_BIT(RCC->RSR, RCC_RSR_RMVF);
 
   /* Decreasing the number of wait states because of lower CPU frequency */
   if (FLASH_LATENCY_DEFAULT  < __HAL_FLASH_GET_LATENCY())
